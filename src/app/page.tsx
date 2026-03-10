@@ -43,16 +43,23 @@ const wagmiConfig = createConfig({
 });
 
 const queryClient = new QueryClient();
+const SAVED_CONTRACTS_STORAGE_KEY = "wallet_ui_saved_contracts_v1";
 
-function getChainName(chainId?: number): string {
-  if (!chainId) return "未知网络";
-  const map: Record<number, string> = {
-    1: "ETH Mainnet",
-    137: "Polygon",
-    56: "BSC",
-    43114: "AVAX",
+function getNetworkInfo(chainId?: number): { name: string; isTestnet: boolean } {
+  if (!chainId) return { name: "未知网络", isTestnet: false };
+
+  const map: Record<number, { name: string; isTestnet: boolean }> = {
+    1: { name: "ETH Mainnet", isTestnet: false },
+    137: { name: "Polygon", isTestnet: false },
+    56: { name: "BSC", isTestnet: false },
+    43114: { name: "AVAX", isTestnet: false },
+    11155111: { name: "Sepolia", isTestnet: true },
+    80002: { name: "Polygon Amoy", isTestnet: true },
+    97: { name: "BSC Testnet", isTestnet: true },
+    43113: { name: "Avalanche Fuji", isTestnet: true },
   };
-  return map[chainId] ?? `Chain ID: ${chainId}`;
+
+  return map[chainId] ?? { name: `Chain ID: ${chainId}`, isTestnet: false };
 }
 
 type FunctionIO = {
@@ -77,6 +84,15 @@ type CallState = {
 };
 
 type ContractMode = "read" | "write";
+
+type SavedContractEntry = {
+  id: string;
+  name: string;
+  address: string;
+  abi: JsonFragment[];
+  abiFileName: string;
+  updatedAt: number;
+};
 
 const defaultCallState: CallState = {
   args: {},
@@ -207,12 +223,18 @@ function WalletAppContent() {
   const [rawAbi, setRawAbi] = useState<JsonFragment[]>([]);
   const [abiFileName, setAbiFileName] = useState("");
   const [abiError, setAbiError] = useState("");
+  const [savedContracts, setSavedContracts] = useState<SavedContractEntry[]>([]);
+  const [saveName, setSaveName] = useState("");
+  const [selectedSavedId, setSelectedSavedId] = useState("");
+  const [storageMessage, setStorageMessage] = useState("");
+  const [storageError, setStorageError] = useState("");
 
   const [proxyMode, setProxyMode] = useState(false);
   const [proxyChecking, setProxyChecking] = useState(false);
   const [proxyDetectionNote, setProxyDetectionNote] = useState("");
   const [selectedMode, setSelectedMode] = useState<ContractMode>("read");
   const [callStates, setCallStates] = useState<Record<string, CallState>>({});
+  const [expandedFunctions, setExpandedFunctions] = useState<Record<string, boolean>>({});
 
   const parsedFunctions = useMemo(() => classifyFunctions(rawAbi), [rawAbi]);
 
@@ -230,12 +252,120 @@ function WalletAppContent() {
     [parsedFunctions],
   );
 
+  const networkInfo = useMemo(
+    () => getNetworkInfo(currentChainId || detectedChainId),
+    [currentChainId, detectedChainId],
+  );
+
   const isHydratedConnected = mounted && isConnected;
   const isHydratedPending = mounted && isPending;
+
+  function toggleFunctionExpanded(signature: string) {
+    setExpandedFunctions((prev) => ({
+      ...prev,
+      [signature]: !prev[signature],
+    }));
+  }
+
+  function persistSavedContracts(next: SavedContractEntry[]) {
+    setSavedContracts(next);
+    window.localStorage.setItem(SAVED_CONTRACTS_STORAGE_KEY, JSON.stringify(next));
+  }
+
+  function saveCurrentContract() {
+    setStorageError("");
+    setStorageMessage("");
+
+    const normalizedName = saveName.trim();
+    if (!normalizedName) {
+      setStorageError("请先输入存储名称");
+      return;
+    }
+
+    if (!isAddress(contractAddress)) {
+      setStorageError("请先输入有效合约地址");
+      return;
+    }
+
+    if (rawAbi.length === 0) {
+      setStorageError("请先导入 ABI JSON 文件");
+      return;
+    }
+
+    const now = Date.now();
+    const existing = savedContracts.find((item) => item.name === normalizedName);
+    const nextEntry: SavedContractEntry = {
+      id: existing?.id ?? `${now}`,
+      name: normalizedName,
+      address: contractAddress,
+      abi: rawAbi,
+      abiFileName,
+      updatedAt: now,
+    };
+
+    const next = [
+      nextEntry,
+      ...savedContracts.filter((item) => item.id !== nextEntry.id),
+    ];
+    persistSavedContracts(next);
+    setSelectedSavedId(nextEntry.id);
+    setStorageMessage(existing ? "已更新该名称对应的配置" : "已保存配置到本地");
+  }
+
+  function loadSavedContractById(savedId: string) {
+    setStorageError("");
+    setStorageMessage("");
+
+    const target = savedContracts.find((item) => item.id === savedId);
+    if (!target) {
+      return;
+    }
+
+    setSaveName(target.name);
+    setContractAddress(target.address);
+    setRawAbi(target.abi);
+    setAbiFileName(target.abiFileName);
+    setCallStates({});
+    setStorageMessage(`已加载配置：${target.name}`);
+    if (isAddress(target.address)) {
+      void detectProxyByAddress(target.address);
+    }
+  }
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const raw = window.localStorage.getItem(SAVED_CONTRACTS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as SavedContractEntry[];
+      if (!Array.isArray(parsed)) return;
+      const valid = parsed.filter(
+        (item) =>
+          item &&
+          typeof item.id === "string" &&
+          typeof item.name === "string" &&
+          typeof item.address === "string" &&
+          Array.isArray(item.abi),
+      );
+      setSavedContracts(valid);
+    } catch {
+      setStorageError("本地配置读取失败，请重新保存");
+    }
+  }, [mounted]);
+
+  useEffect(() => {
+    setExpandedFunctions({});
+  }, [rawAbi]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!selectedSavedId) return;
+    loadSavedContractById(selectedSavedId);
+  }, [selectedSavedId, savedContracts, mounted]);
 
   useEffect(() => {
     const ethereum = (window as Window & {
@@ -537,11 +667,22 @@ function WalletAppContent() {
             <span className="text-sm text-slate-600">
               {mounted ? (walletAddress ? `地址: ${walletAddress}` : "未连接") : "地址: --"}
             </span>
-            <span className="text-sm text-slate-600">
-              网络: {mounted ? getChainName(currentChainId || detectedChainId) : "--"}
+            <span
+              className={`text-sm ${
+                mounted && networkInfo.isTestnet
+                  ? "font-semibold text-amber-700"
+                  : "text-slate-600"
+              }`}
+            >
+              网络: {mounted ? networkInfo.name : "--"}
             </span>
           </div>
         </div>
+        {mounted && networkInfo.isTestnet && (
+          <p className="mt-2 text-sm font-semibold text-amber-700">
+            ⚠ 当前为测试网，请勿使用主网资产。
+          </p>
+        )}
         {connectError && <p className="mt-2 text-sm text-red-600">{connectError}</p>}
       </section>
 
@@ -567,6 +708,45 @@ function WalletAppContent() {
               className="block w-full rounded-md border p-2"
             />
           </label>
+        </div>
+
+        <div className="mt-4 rounded-md border border-dashed p-3">
+          <p className="text-sm font-medium text-slate-700">本地存储合约配置（名称 + 地址 + ABI）</p>
+          <div className="mt-2 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <input
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="输入存储名称，例如：USDT 主网"
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+            <button
+              onClick={saveCurrentContract}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              保存当前配置
+            </button>
+          </div>
+
+          <div className="mt-3">
+            <select
+              value={selectedSavedId}
+              onChange={(e) => setSelectedSavedId(e.target.value)}
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            >
+              <option value="">请选择已保存配置</option>
+              {savedContracts.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {`${item.name} · ${item.address.slice(0, 6)}...${item.address.slice(-4)} · ${
+                    item.abiFileName || "ABI"
+                  }`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <p className="mt-2 text-xs text-slate-500">已保存 {savedContracts.length} 条配置，刷新后仍可使用；从列表选择会自动加载。</p>
+          {storageMessage && <p className="mt-2 text-sm text-emerald-700">{storageMessage}</p>}
+          {storageError && <p className="mt-2 text-sm text-red-600">{storageError}</p>}
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
@@ -597,10 +777,10 @@ function WalletAppContent() {
 
       <section className="mt-6 rounded-lg border bg-white p-4 shadow-sm">
         <h2 className="text-lg font-medium">3. 合约接口</h2>
-        <div className="mt-3 flex flex-wrap justify-between gap-2">
+        <div className="mt-3 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => setSelectedMode("read")}
-            className={`rounded-md px-3 py-2 text-sm font-medium ${
+            className={`min-w-[10.5rem] rounded-md px-3 py-2 text-center text-sm font-medium ${
               selectedMode === "read"
                 ? "bg-blue-600 text-white"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -610,7 +790,7 @@ function WalletAppContent() {
           </button>
           <button
             onClick={() => setSelectedMode("write")}
-            className={`rounded-md px-3 py-2 text-sm font-medium ${
+            className={`min-w-[10.5rem] rounded-md px-3 py-2 text-center text-sm font-medium ${
               selectedMode === "write"
                 ? "bg-emerald-600 text-white"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -628,41 +808,54 @@ function WalletAppContent() {
               )}
               {readFunctions.map((fn) => {
                 const state = getCallState(fn.signature);
+                const expanded = !!expandedFunctions[fn.signature];
                 return (
                   <div key={fn.signature} className="rounded-md border p-3">
-                    <p className="text-sm font-medium">{fn.signature}</p>
-                    <div className="mt-2 space-y-2">
-                      {fn.inputs.map((input) => (
-                        <input
-                          key={`${fn.signature}-${input.name}`}
-                          placeholder={`${input.name} (${input.type})`}
-                          value={state.args[input.name] ?? ""}
-                          onChange={(e) =>
-                            updateCallState(fn.signature, {
-                              args: {
-                                ...state.args,
-                                [input.name]: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full rounded-md border px-3 py-2 text-sm"
-                        />
-                      ))}
-                    </div>
-
                     <button
-                      onClick={() => executeFunction(fn, false)}
-                      className="mt-3 rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500"
-                      disabled={state.loading}
+                      type="button"
+                      onClick={() => toggleFunctionExpanded(fn.signature)}
+                      className="flex w-full items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-left"
                     >
-                      {state.loading ? "调用中..." : "Read"}
+                      <span className="text-sm font-medium">{fn.signature}</span>
+                      <span className="text-xs text-slate-500">{expanded ? "收起" : "展开"}</span>
                     </button>
 
-                    {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
-                    {state.result && (
-                      <pre className="mt-2 overflow-x-auto rounded bg-slate-100 p-2 text-xs">
-                        {state.result}
-                      </pre>
+                    {expanded && (
+                      <>
+                        <div className="mt-2 space-y-2">
+                          {fn.inputs.map((input) => (
+                            <input
+                              key={`${fn.signature}-${input.name}`}
+                              placeholder={`${input.name} (${input.type})`}
+                              value={state.args[input.name] ?? ""}
+                              onChange={(e) =>
+                                updateCallState(fn.signature, {
+                                  args: {
+                                    ...state.args,
+                                    [input.name]: e.target.value,
+                                  },
+                                })
+                              }
+                              className="w-full rounded-md border px-3 py-2 text-sm"
+                            />
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={() => executeFunction(fn, false)}
+                          className="mt-3 rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500"
+                          disabled={state.loading}
+                        >
+                          {state.loading ? "调用中..." : "Read"}
+                        </button>
+
+                        {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
+                        {state.result && (
+                          <pre className="mt-2 overflow-x-auto rounded bg-slate-100 p-2 text-xs">
+                            {state.result}
+                          </pre>
+                        )}
+                      </>
                     )}
                   </div>
                 );
@@ -677,54 +870,67 @@ function WalletAppContent() {
               )}
               {writeFunctions.map((fn) => {
                 const state = getCallState(fn.signature);
+                const expanded = !!expandedFunctions[fn.signature];
                 return (
                   <div key={fn.signature} className="rounded-md border p-3">
-                    <p className="text-sm font-medium">{fn.signature}</p>
-                    <p className="mt-1 text-xs text-slate-500">{fn.stateMutability}</p>
-
-                    <div className="mt-2 space-y-2">
-                      {fn.inputs.map((input) => (
-                        <input
-                          key={`${fn.signature}-${input.name}`}
-                          placeholder={`${input.name} (${input.type})`}
-                          value={state.args[input.name] ?? ""}
-                          onChange={(e) =>
-                            updateCallState(fn.signature, {
-                              args: {
-                                ...state.args,
-                                [input.name]: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full rounded-md border px-3 py-2 text-sm"
-                        />
-                      ))}
-
-                      {fn.stateMutability === "payable" && (
-                        <input
-                          placeholder="msg.value (wei)"
-                          value={state.value}
-                          onChange={(e) =>
-                            updateCallState(fn.signature, { value: e.target.value })
-                          }
-                          className="w-full rounded-md border px-3 py-2 text-sm"
-                        />
-                      )}
-                    </div>
-
                     <button
-                      onClick={() => executeFunction(fn, true)}
-                      className="mt-3 rounded-md bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500"
-                      disabled={state.loading}
+                      type="button"
+                      onClick={() => toggleFunctionExpanded(fn.signature)}
+                      className="flex w-full items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-left"
                     >
-                      {state.loading ? "提交中..." : "Write"}
+                      <span className="text-sm font-medium">{fn.signature}</span>
+                      <span className="text-xs text-slate-500">{expanded ? "收起" : "展开"}</span>
                     </button>
 
-                    {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
-                    {state.result && (
-                      <pre className="mt-2 overflow-x-auto rounded bg-slate-100 p-2 text-xs">
-                        {state.result}
-                      </pre>
+                    {expanded && (
+                      <>
+                        <p className="mt-2 text-xs text-slate-500">{fn.stateMutability}</p>
+
+                        <div className="mt-2 space-y-2">
+                          {fn.inputs.map((input) => (
+                            <input
+                              key={`${fn.signature}-${input.name}`}
+                              placeholder={`${input.name} (${input.type})`}
+                              value={state.args[input.name] ?? ""}
+                              onChange={(e) =>
+                                updateCallState(fn.signature, {
+                                  args: {
+                                    ...state.args,
+                                    [input.name]: e.target.value,
+                                  },
+                                })
+                              }
+                              className="w-full rounded-md border px-3 py-2 text-sm"
+                            />
+                          ))}
+
+                          {fn.stateMutability === "payable" && (
+                            <input
+                              placeholder="msg.value (wei)"
+                              value={state.value}
+                              onChange={(e) =>
+                                updateCallState(fn.signature, { value: e.target.value })
+                              }
+                              className="w-full rounded-md border px-3 py-2 text-sm"
+                            />
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => executeFunction(fn, true)}
+                          className="mt-3 rounded-md bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500"
+                          disabled={state.loading}
+                        >
+                          {state.loading ? "提交中..." : "Write"}
+                        </button>
+
+                        {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
+                        {state.result && (
+                          <pre className="mt-2 overflow-x-auto rounded bg-slate-100 p-2 text-xs">
+                            {state.result}
+                          </pre>
+                        )}
+                      </>
                     )}
                   </div>
                 );
