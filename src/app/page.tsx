@@ -336,6 +336,30 @@ function WalletAppContent() {
     setMounted(true);
   }, []);
 
+  // Suppress noisy wagmi connector log about already connected
+  useEffect(() => {
+    const origWarn = console.warn.bind(console);
+    const origInfo = console.info.bind(console);
+    const filterMsg = (args: unknown[]) =>
+      args.some(
+        (a) => typeof a === "string" && /Connector already connected/.test(a),
+      );
+
+    console.warn = (...args: unknown[]) => {
+      if (filterMsg(args)) return;
+      origWarn(...args);
+    };
+    console.info = (...args: unknown[]) => {
+      if (filterMsg(args)) return;
+      origInfo(...args);
+    };
+
+    return () => {
+      console.warn = origWarn;
+      console.info = origInfo;
+    };
+  }, []);
+
   useEffect(() => {
     if (!mounted) return;
     try {
@@ -402,7 +426,13 @@ function WalletAppContent() {
 
   useEffect(() => {
     if (wagmiConnectError) {
-      setConnectError(wagmiConnectError.message || "连接钱包失败");
+      const msg = wagmiConnectError.message || "连接钱包失败";
+      // Ignore benign 'Connector already connected' noise from wagmi
+      if (/Connector already connected/.test(msg)) {
+        setConnectError("");
+        return;
+      }
+      setConnectError(msg);
       return;
     }
     setConnectError("");
@@ -643,7 +673,7 @@ function WalletAppContent() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-8 md:px-8 md:py-10">
       <div className="rounded-3xl border border-primary-100/70 bg-gradient-to-br from-white via-white to-primary-50/60 p-6 shadow-lg shadow-primary-500/10 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-700">Arkreen Wallet UI</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-700">Unibuy Wallet UI</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900 md:text-3xl">Wallet App (MetaMask + ABI)</h1>
         <p className="mt-2 text-sm text-slate-600 md:text-base">
           连接钱包、导入 ABI、快速执行合约读写调用。
@@ -656,9 +686,12 @@ function WalletAppContent() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={connectWallet}
-              className="btn-primary rounded-xl px-4 py-2 text-sm"
+              className="btn-primary rounded-xl px-4 py-2 text-sm inline-flex items-center"
               disabled={!mounted || isHydratedPending}
             >
+              <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                <path d="M12 2a1 1 0 011 1v2a1 1 0 11-2 0V3a1 1 0 011-1zM5 7a1 1 0 011 1v2a1 1 0 11-2 0V8a1 1 0 011-1zm13 0a1 1 0 011 1v2a1 1 0 11-2 0V8a1 1 0 011-1zM4 13a1 1 0 011 1v2a6 6 0 006 6h2a6 6 0 006-6v-2a1 1 0 112 0v2a8 8 0 01-8 8h-2a8 8 0 01-8-8v-2a1 1 0 011-1z" fill="currentColor" />
+              </svg>
               {isHydratedPending ? "连接中..." : "连接 MetaMask"}
             </button>
             <button
@@ -711,7 +744,7 @@ function WalletAppContent() {
               type="file"
               accept="application/json,.json"
               onChange={onImportAbi}
-              className="block w-full rounded-xl border border-slate-200 bg-white/80 p-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-200"
+              className="block w-full rounded-xl border border-slate-200 bg-white/80 p-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-arkreen file:px-4 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-primary-600"
             />
           </label>
         </div>
