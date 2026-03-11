@@ -641,37 +641,43 @@ function WalletAppContent() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl p-6 md:p-10">
-      <h1 className="text-2xl font-semibold">Wallet App (MetaMask + ABI)</h1>
+    <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-8 md:px-8 md:py-10">
+      <div className="rounded-3xl border border-primary-100/70 bg-gradient-to-br from-white via-white to-primary-50/60 p-6 shadow-lg shadow-primary-500/10 md:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-700">Arkreen Wallet UI</p>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900 md:text-3xl">Wallet App (MetaMask + ABI)</h1>
+        <p className="mt-2 text-sm text-slate-600 md:text-base">
+          连接钱包、导入 ABI、快速执行合约读写调用。
+        </p>
+      </div>
 
-      <section className="mt-6 rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-medium">1. 钱包连接</h2>
+      <section className="section-card mt-6 animate-fadeIn">
+        <h2 className="section-title">1. 钱包连接</h2>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={connectWallet}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              className="btn-primary rounded-xl px-4 py-2 text-sm"
               disabled={!mounted || isHydratedPending}
             >
               {isHydratedPending ? "连接中..." : "连接 MetaMask"}
             </button>
             <button
               onClick={disconnectWallet}
-              className="rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-300"
+              className="btn-secondary rounded-xl px-4 py-2 text-sm"
               disabled={!mounted || !isHydratedConnected}
             >
               断开 MetaMask 链接
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-3 md:justify-end">
-            <span className="text-sm text-slate-600">
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
               {mounted ? (walletAddress ? `地址: ${walletAddress}` : "未连接") : "地址: --"}
             </span>
             <span
-              className={`text-sm ${
+              className={`rounded-full px-3 py-1 text-sm ${
                 mounted && networkInfo.isTestnet
-                  ? "font-semibold text-amber-700"
-                  : "text-slate-600"
+                  ? "bg-amber-100 font-semibold text-amber-700"
+                  : "bg-slate-100 text-slate-600"
               }`}
             >
               网络: {mounted ? networkInfo.name : "--"}
@@ -686,8 +692,8 @@ function WalletAppContent() {
         {connectError && <p className="mt-2 text-sm text-red-600">{connectError}</p>}
       </section>
 
-      <section className="mt-6 rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-medium">2. ABI 导入与合约配置</h2>
+      <section className="section-card mt-6 animate-slideUp">
+        <h2 className="section-title">2. ABI 导入与合约配置</h2>
         <div className="mt-3 grid gap-4 md:grid-cols-2">
           <label className="text-sm">
             <span className="mb-1 block text-slate-700">合约地址</span>
@@ -695,7 +701,7 @@ function WalletAppContent() {
               value={contractAddress}
               onChange={(e) => setContractAddress(e.target.value.trim())}
               placeholder="0x..."
-              className="w-full rounded-md border px-3 py-2 outline-none ring-slate-300 focus:ring"
+              className="input-field"
             />
           </label>
 
@@ -705,23 +711,23 @@ function WalletAppContent() {
               type="file"
               accept="application/json,.json"
               onChange={onImportAbi}
-              className="block w-full rounded-md border p-2"
+              className="block w-full rounded-xl border border-slate-200 bg-white/80 p-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-200"
             />
           </label>
         </div>
 
-        <div className="mt-4 rounded-md border border-dashed p-3">
+        <div className="mt-4 rounded-2xl border border-dashed border-primary-200 bg-white/70 p-4">
           <p className="text-sm font-medium text-slate-700">本地存储合约配置（名称 + 地址 + ABI）</p>
           <div className="mt-2 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
             <input
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
               placeholder="输入存储名称，例如：USDT 主网"
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="input-field"
             />
             <button
               onClick={saveCurrentContract}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              className="btn-primary rounded-xl px-4 py-2 text-sm"
             >
               保存当前配置
             </button>
@@ -731,7 +737,7 @@ function WalletAppContent() {
             <select
               value={selectedSavedId}
               onChange={(e) => setSelectedSavedId(e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="input-field"
             >
               <option value="">请选择已保存配置</option>
               {savedContracts.map((item) => (
@@ -758,7 +764,7 @@ function WalletAppContent() {
           </div>
           <button
             onClick={() => detectProxyByAddress(contractAddress)}
-            className="rounded-md bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-300"
+            className="btn-secondary rounded-lg px-3 py-1.5 text-xs"
             disabled={proxyChecking || !isAddress(contractAddress)}
           >
             重新检测
@@ -775,14 +781,14 @@ function WalletAppContent() {
         {abiError && <p className="mt-2 text-sm text-red-600">{abiError}</p>}
       </section>
 
-      <section className="mt-6 rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-medium">3. 合约接口</h2>
+      <section className="section-card mt-6 animate-slideUp">
+        <h2 className="section-title">3. 合约接口</h2>
         <div className="mt-3 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => setSelectedMode("read")}
-            className={`min-w-[10.5rem] rounded-md px-3 py-2 text-center text-sm font-medium ${
+            className={`min-w-[10.5rem] rounded-xl px-3 py-2 text-center text-sm font-medium transition-all ${
               selectedMode === "read"
-                ? "bg-blue-600 text-white"
+                ? "bg-primary-600 text-white shadow-md shadow-primary-500/30"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200"
             }`}
           >
@@ -790,7 +796,7 @@ function WalletAppContent() {
           </button>
           <button
             onClick={() => setSelectedMode("write")}
-            className={`min-w-[10.5rem] rounded-md px-3 py-2 text-center text-sm font-medium ${
+            className={`min-w-[10.5rem] rounded-xl px-3 py-2 text-center text-sm font-medium transition-all ${
               selectedMode === "write"
                 ? "bg-primary-600 text-white"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -810,11 +816,11 @@ function WalletAppContent() {
                 const state = getCallState(fn.signature);
                 const expanded = !!expandedFunctions[fn.signature];
                 return (
-                  <div key={fn.signature} className="rounded-md border p-3">
+                  <div key={fn.signature} className="rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm">
                     <button
                       type="button"
                       onClick={() => toggleFunctionExpanded(fn.signature)}
-                      className="flex w-full items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-left"
+                      className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-primary-50"
                     >
                       <span className="text-sm font-medium">{fn.signature}</span>
                       <span className="text-xs text-slate-500">{expanded ? "收起" : "展开"}</span>
@@ -836,14 +842,14 @@ function WalletAppContent() {
                                   },
                                 })
                               }
-                              className="w-full rounded-md border px-3 py-2 text-sm"
+                              className="input-field"
                             />
                           ))}
                         </div>
 
                         <button
                           onClick={() => executeFunction(fn, false)}
-                          className="mt-3 rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500"
+                          className="btn-primary mt-3 rounded-xl px-4 py-2 text-sm"
                           disabled={state.loading}
                         >
                           {state.loading ? "调用中..." : "Read"}
@@ -851,7 +857,7 @@ function WalletAppContent() {
 
                         {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
                         {state.result && (
-                          <pre className="mt-2 overflow-x-auto rounded bg-slate-100 p-2 text-xs">
+                          <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-100 p-3 text-xs text-slate-700">
                             {state.result}
                           </pre>
                         )}
@@ -872,11 +878,11 @@ function WalletAppContent() {
                 const state = getCallState(fn.signature);
                 const expanded = !!expandedFunctions[fn.signature];
                 return (
-                  <div key={fn.signature} className="rounded-md border p-3">
+                  <div key={fn.signature} className="rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm">
                     <button
                       type="button"
                       onClick={() => toggleFunctionExpanded(fn.signature)}
-                      className="flex w-full items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-left"
+                      className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-primary-50"
                     >
                       <span className="text-sm font-medium">{fn.signature}</span>
                       <span className="text-xs text-slate-500">{expanded ? "收起" : "展开"}</span>
@@ -900,7 +906,7 @@ function WalletAppContent() {
                                   },
                                 })
                               }
-                              className="w-full rounded-md border px-3 py-2 text-sm"
+                              className="input-field"
                             />
                           ))}
 
@@ -911,14 +917,14 @@ function WalletAppContent() {
                               onChange={(e) =>
                                 updateCallState(fn.signature, { value: e.target.value })
                               }
-                              className="w-full rounded-md border px-3 py-2 text-sm"
+                              className="input-field"
                             />
                           )}
                         </div>
 
                         <button
                           onClick={() => executeFunction(fn, true)}
-                          className="mt-3 rounded-md bg-primary-600 px-3 py-2 text-sm text-white hover:bg-primary-500"
+                          className="btn-primary mt-3 rounded-xl px-4 py-2 text-sm"
                           disabled={state.loading}
                         >
                           {state.loading ? "提交中..." : "Write"}
@@ -926,7 +932,7 @@ function WalletAppContent() {
 
                         {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
                         {state.result && (
-                          <pre className="mt-2 overflow-x-auto rounded bg-slate-100 p-2 text-xs">
+                          <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-100 p-3 text-xs text-slate-700">
                             {state.result}
                           </pre>
                         )}

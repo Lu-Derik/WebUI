@@ -7,7 +7,7 @@
 }
 
 body {
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-gradient-to-b from-primary-50/60 via-slate-50 to-slate-100 text-slate-900 antialiased;
 }
 
 /* Custom scrollbar */
