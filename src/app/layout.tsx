@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Wallet UI",
-  description: "MetaMask + ABI contract interaction",
+  title: "WalletUI - Powered by Arkreen",
+  description: "Web3 智能合约交互工具 - MetaMask + ABI",
 };
 
 export default function RootLayout({

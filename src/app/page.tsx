@@ -745,14 +745,14 @@ function WalletAppContent() {
           </div>
 
           <p className="mt-2 text-xs text-slate-500">已保存 {savedContracts.length} 条配置，刷新后仍可使用；从列表选择会自动加载。</p>
-          {storageMessage && <p className="mt-2 text-sm text-emerald-700">{storageMessage}</p>}
+          {storageMessage && <p className="mt-2 text-sm text-primary-700">{storageMessage}</p>}
           {storageError && <p className="mt-2 text-sm text-red-600">{storageError}</p>}
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-slate-700">自动检测结果：</span>
-            <span className={proxyMode ? "text-emerald-700" : "text-slate-700"}>
+            <span className={proxyMode ? "text-primary-700" : "text-slate-700"}>
               {proxyChecking ? "检测中..." : proxyMode ? "代理合约" : "普通合约"}
             </span>
           </div>
@@ -770,7 +770,7 @@ function WalletAppContent() {
         )}
 
         {abiFileName && (
-          <p className="mt-2 text-sm text-emerald-700">已导入 ABI：{abiFileName}</p>
+          <p className="mt-2 text-sm text-primary-700">已导入 ABI：{abiFileName}</p>
         )}
         {abiError && <p className="mt-2 text-sm text-red-600">{abiError}</p>}
       </section>
@@ -792,7 +792,7 @@ function WalletAppContent() {
             onClick={() => setSelectedMode("write")}
             className={`min-w-[10.5rem] rounded-md px-3 py-2 text-center text-sm font-medium ${
               selectedMode === "write"
-                ? "bg-emerald-600 text-white"
+                ? "bg-primary-600 text-white"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200"
             }`}
           >
@@ -918,7 +918,7 @@ function WalletAppContent() {
 
                         <button
                           onClick={() => executeFunction(fn, true)}
-                          className="mt-3 rounded-md bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500"
+                          className="mt-3 rounded-md bg-primary-600 px-3 py-2 text-sm text-white hover:bg-primary-500"
                           disabled={state.loading}
                         >
                           {state.loading ? "提交中..." : "Write"}
