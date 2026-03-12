@@ -66,6 +66,205 @@ const wagmiConfig = createConfig({
 
 const queryClient = new QueryClient();
 const SAVED_CONTRACTS_STORAGE_KEY = "wallet_ui_saved_contracts_v1";
+const UI_LOCALE_STORAGE_KEY = "wallet_ui_locale_v1";
+const UI_THEME_STORAGE_KEY = "wallet_ui_theme_v1";
+
+type UiLocale = "zh-CN" | "zh-TW" | "en" | "fr";
+type UiTheme = "light" | "dark";
+
+const localeOptions: Array<{ value: UiLocale; label: string }> = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "en", label: "English" },
+  { value: "fr", label: "Français" },
+  { value: "zh-TW", label: "繁體中文" },
+];
+
+const uiText: Record<UiLocale, Record<string, string>> = {
+  "zh-CN": {
+    subtitle: "连接钱包、导入 ABI、快速执行合约读写调用。",
+    language: "语言",
+    theme: "主题",
+    light: "白天",
+    dark: "黑夜",
+    walletSection: "1. 钱包连接",
+    connecting: "连接中...",
+    connectMetaMask: "连接 MetaMask",
+    disconnectMetaMask: "断开 MetaMask 链接",
+    address: "地址",
+    notConnected: "未连接",
+    network: "网络",
+    testnet: "测试网",
+    mainnet: "主网",
+    testnetWarning: "⚠ 当前为测试网环境（{network}），请勿使用主网资产。",
+    contractSection: "2. ABI 导入与合约配置",
+    contractAddress: "合约地址",
+    importAbi: "导入 ABI JSON 文件",
+    localConfig: "本地存储合约配置（名称 + 地址 + ABI）",
+    saveToCurrentNetwork: "当前配置将保存到：{networkType}列表（{networkName}）",
+    saveNamePlaceholder: "输入存储名称，例如：USDT 主网",
+    saveConfig: "保存当前配置",
+    selectConfig: "请选择当前网络已保存配置",
+    deleteSelected: "删除已选配置",
+    configStats: "当前网络配置 {current} 条（总计 {total} 条），刷新后仍可使用；切换网络后列表会自动切换。",
+    detectResult: "自动检测结果：",
+    detecting: "检测中...",
+    proxyContract: "代理合约",
+    normalContract: "普通合约",
+    redetect: "重新检测",
+    importedAbi: "已导入 ABI：",
+    interfaceSection: "3. 合约接口",
+    readAsProxy: "Read as Proxy",
+    readContract: "Read Contract",
+    writeAsProxy: "Write as Proxy",
+    writeContract: "Write Contract",
+    noReadFunctions: "暂无可读函数（view/pure）",
+    noWriteFunctions: "暂无可写函数（nonpayable/payable）",
+    collapse: "收起",
+    expand: "展开",
+    calling: "调用中...",
+    submitting: "提交中...",
+    read: "Read",
+    write: "Write",
+  },
+  "zh-TW": {
+    subtitle: "連接錢包、匯入 ABI、快速執行合約讀寫呼叫。",
+    language: "語言",
+    theme: "主題",
+    light: "白天",
+    dark: "黑夜",
+    walletSection: "1. 錢包連接",
+    connecting: "連接中...",
+    connectMetaMask: "連接 MetaMask",
+    disconnectMetaMask: "斷開 MetaMask 連接",
+    address: "地址",
+    notConnected: "未連接",
+    network: "網路",
+    testnet: "測試網",
+    mainnet: "主網",
+    testnetWarning: "⚠ 目前為測試網環境（{network}），請勿使用主網資產。",
+    contractSection: "2. ABI 匯入與合約配置",
+    contractAddress: "合約地址",
+    importAbi: "匯入 ABI JSON 檔案",
+    localConfig: "本地儲存合約配置（名稱 + 地址 + ABI）",
+    saveToCurrentNetwork: "目前配置將儲存到：{networkType}列表（{networkName}）",
+    saveNamePlaceholder: "輸入儲存名稱，例如：USDT 主網",
+    saveConfig: "儲存目前配置",
+    selectConfig: "請選擇目前網路已儲存配置",
+    deleteSelected: "刪除已選配置",
+    configStats: "目前網路配置 {current} 筆（總計 {total} 筆），重新整理後仍可使用；切換網路後列表會自動切換。",
+    detectResult: "自動偵測結果：",
+    detecting: "偵測中...",
+    proxyContract: "代理合約",
+    normalContract: "普通合約",
+    redetect: "重新偵測",
+    importedAbi: "已匯入 ABI：",
+    interfaceSection: "3. 合約介面",
+    readAsProxy: "Read as Proxy",
+    readContract: "Read Contract",
+    writeAsProxy: "Write as Proxy",
+    writeContract: "Write Contract",
+    noReadFunctions: "暫無可讀函式（view/pure）",
+    noWriteFunctions: "暫無可寫函式（nonpayable/payable）",
+    collapse: "收起",
+    expand: "展開",
+    calling: "呼叫中...",
+    submitting: "提交中...",
+    read: "Read",
+    write: "Write",
+  },
+  en: {
+    subtitle: "Connect wallet, import ABI, and execute read/write contract calls quickly.",
+    language: "Language",
+    theme: "Theme",
+    light: "Light",
+    dark: "Dark",
+    walletSection: "1. Wallet Connection",
+    connecting: "Connecting...",
+    connectMetaMask: "Connect MetaMask",
+    disconnectMetaMask: "Disconnect MetaMask",
+    address: "Address",
+    notConnected: "Not connected",
+    network: "Network",
+    testnet: "Testnet",
+    mainnet: "Mainnet",
+    testnetWarning: "⚠ You are on a testnet ({network}). Do not use mainnet assets.",
+    contractSection: "2. ABI Import & Contract Config",
+    contractAddress: "Contract Address",
+    importAbi: "Import ABI JSON File",
+    localConfig: "Local Contract Config (Name + Address + ABI)",
+    saveToCurrentNetwork: "Current config will be saved to: {networkType} list ({networkName})",
+    saveNamePlaceholder: "Enter config name, e.g. USDT Mainnet",
+    saveConfig: "Save Current Config",
+    selectConfig: "Select saved config for current network",
+    deleteSelected: "Delete Selected Config",
+    configStats: "Current network configs: {current} (total: {total}). Data persists after refresh; list switches with network.",
+    detectResult: "Auto-detection:",
+    detecting: "Detecting...",
+    proxyContract: "Proxy Contract",
+    normalContract: "Regular Contract",
+    redetect: "Detect Again",
+    importedAbi: "Imported ABI:",
+    interfaceSection: "3. Contract Interface",
+    readAsProxy: "Read as Proxy",
+    readContract: "Read Contract",
+    writeAsProxy: "Write as Proxy",
+    writeContract: "Write Contract",
+    noReadFunctions: "No readable functions (view/pure)",
+    noWriteFunctions: "No writable functions (nonpayable/payable)",
+    collapse: "Collapse",
+    expand: "Expand",
+    calling: "Calling...",
+    submitting: "Submitting...",
+    read: "Read",
+    write: "Write",
+  },
+  fr: {
+    subtitle: "Connectez le portefeuille, importez l'ABI et exécutez rapidement les appels de lecture/écriture.",
+    language: "Langue",
+    theme: "Thème",
+    light: "Clair",
+    dark: "Sombre",
+    walletSection: "1. Connexion du portefeuille",
+    connecting: "Connexion...",
+    connectMetaMask: "Connecter MetaMask",
+    disconnectMetaMask: "Déconnecter MetaMask",
+    address: "Adresse",
+    notConnected: "Non connecté",
+    network: "Réseau",
+    testnet: "Testnet",
+    mainnet: "Mainnet",
+    testnetWarning: "⚠ Vous êtes sur un testnet ({network}). N'utilisez pas d'actifs mainnet.",
+    contractSection: "2. Import ABI et configuration du contrat",
+    contractAddress: "Adresse du contrat",
+    importAbi: "Importer le fichier ABI JSON",
+    localConfig: "Configuration locale du contrat (Nom + Adresse + ABI)",
+    saveToCurrentNetwork: "La configuration actuelle sera enregistrée dans : liste {networkType} ({networkName})",
+    saveNamePlaceholder: "Saisir un nom, ex. USDT Mainnet",
+    saveConfig: "Enregistrer la configuration",
+    selectConfig: "Sélectionner une configuration du réseau actuel",
+    deleteSelected: "Supprimer la configuration sélectionnée",
+    configStats: "Configurations du réseau actuel : {current} (total : {total}). Les données persistent après actualisation et suivent le changement de réseau.",
+    detectResult: "Détection automatique :",
+    detecting: "Détection...",
+    proxyContract: "Contrat proxy",
+    normalContract: "Contrat normal",
+    redetect: "Relancer la détection",
+    importedAbi: "ABI importé :",
+    interfaceSection: "3. Interface du contrat",
+    readAsProxy: "Read as Proxy",
+    readContract: "Read Contract",
+    writeAsProxy: "Write as Proxy",
+    writeContract: "Write Contract",
+    noReadFunctions: "Aucune fonction lisible (view/pure)",
+    noWriteFunctions: "Aucune fonction modifiable (nonpayable/payable)",
+    collapse: "Réduire",
+    expand: "Étendre",
+    calling: "Appel en cours...",
+    submitting: "Soumission...",
+    read: "Read",
+    write: "Write",
+  },
+};
 
 function getNetworkInfo(chainId?: number): { name: string; isTestnet: boolean; isKnown: boolean } {
   if (!chainId) return { name: "未知网络", isTestnet: false, isKnown: false };
@@ -280,6 +479,8 @@ function WalletAppContent() {
   const [selectedSavedId, setSelectedSavedId] = useState("");
   const [selectedSwitchChainId, setSelectedSwitchChainId] = useState<number>(supportedChains[0].id);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
+  const [locale, setLocale] = useState<UiLocale>("zh-CN");
+  const [theme, setTheme] = useState<UiTheme>("light");
   const [storageMessage, setStorageMessage] = useState("");
   const [storageError, setStorageError] = useState("");
 
@@ -314,6 +515,15 @@ function WalletAppContent() {
   const displayNetworkInfo = mounted
     ? networkInfo
     : { name: "--", isTestnet: false, isKnown: false };
+  const t = uiText[locale];
+
+  function formatTemplate(template: string, values: Record<string, string | number>): string {
+    let formatted = template;
+    for (const [key, value] of Object.entries(values)) {
+      formatted = formatted.split(`{${key}}`).join(String(value));
+    }
+    return formatted;
+  }
 
   const currentNetworkSavedContracts = useMemo(
     () => savedContracts.filter((item) => item.chainId === activeChainId),
@@ -432,6 +642,32 @@ function WalletAppContent() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const savedLocale = window.localStorage.getItem(UI_LOCALE_STORAGE_KEY) as UiLocale | null;
+    if (savedLocale && localeOptions.some((item) => item.value === savedLocale)) {
+      setLocale(savedLocale);
+    }
+
+    const savedTheme = window.localStorage.getItem(UI_THEME_STORAGE_KEY) as UiTheme | null;
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+      return;
+    }
+
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setTheme(prefersDark ? "dark" : "light");
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.lang = locale;
+    window.localStorage.setItem(UI_THEME_STORAGE_KEY, theme);
+    window.localStorage.setItem(UI_LOCALE_STORAGE_KEY, locale);
+  }, [mounted, theme, locale]);
 
   // Suppress noisy wagmi connector log about already connected
   useEffect(() => {
@@ -866,16 +1102,38 @@ function WalletAppContent() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-8 md:px-8 md:py-10">
-      <div className="rounded-3xl border border-primary-100/70 bg-gradient-to-br from-white via-white to-primary-50/60 p-6 shadow-lg shadow-primary-500/10 md:p-8">
+      <div className="rounded-3xl border border-primary-100/70 bg-gradient-to-br from-white via-white to-primary-50/60 p-6 shadow-lg shadow-primary-500/10 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 dark:shadow-black/30 md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-700">Web3 UI</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900 md:text-3xl">Wallet App (MetaMask + ABI)</h1>
-        <p className="mt-2 text-sm text-slate-600 md:text-base">
-          连接钱包、导入 ABI、快速执行合约读写调用。
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 md:text-3xl">Wallet App (MetaMask + ABI)</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">{t.language}</label>
+            <select
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as UiLocale)}
+              className="input-field w-[9.5rem] py-1.5"
+            >
+              {localeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="btn-secondary rounded-xl px-3 py-2 text-xs"
+            >
+              {`${t.theme}: ${theme === "dark" ? t.dark : t.light}`}
+            </button>
+          </div>
+        </div>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 md:text-base">
+          {t.subtitle}
         </p>
       </div>
 
       <section className="section-card mt-6 animate-fadeIn">
-        <h2 className="section-title">1. 钱包连接</h2>
+        <h2 className="section-title">{t.walletSection}</h2>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -886,28 +1144,28 @@ function WalletAppContent() {
               <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                 <path d="M12 2a1 1 0 011 1v2a1 1 0 11-2 0V3a1 1 0 011-1zM5 7a1 1 0 011 1v2a1 1 0 11-2 0V8a1 1 0 011-1zm13 0a1 1 0 011 1v2a1 1 0 11-2 0V8a1 1 0 011-1zM4 13a1 1 0 011 1v2a6 6 0 006 6h2a6 6 0 006-6v-2a1 1 0 112 0v2a8 8 0 01-8 8h-2a8 8 0 01-8-8v-2a1 1 0 011-1z" fill="currentColor" />
               </svg>
-              {isHydratedPending ? "连接中..." : "连接 MetaMask"}
+              {isHydratedPending ? t.connecting : t.connectMetaMask}
             </button>
             <button
               onClick={disconnectWallet}
               className="btn-secondary rounded-xl px-4 py-2 text-sm"
               disabled={!mounted || !isHydratedConnected}
             >
-              断开 MetaMask 链接
+              {t.disconnectMetaMask}
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
-              {mounted ? (walletAddress ? `地址: ${walletAddress}` : "未连接") : "地址: --"}
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+              {mounted ? (walletAddress ? `${t.address}: ${walletAddress}` : t.notConnected) : `${t.address}: --`}
             </span>
             <span
               className={`rounded-full px-3 py-1 text-sm ${
                 mounted && displayNetworkInfo.isTestnet
                   ? "bg-amber-100 font-semibold text-amber-700"
-                  : "bg-slate-100 text-slate-600"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200"
               }`}
             >
-              网络: {displayNetworkInfo.isTestnet ? "测试网" : "主网"} · {displayNetworkInfo.name}
+              {t.network}: {displayNetworkInfo.isTestnet ? t.testnet : t.mainnet} · {displayNetworkInfo.name}
             </span>
           </div>
         </div>
@@ -926,24 +1184,24 @@ function WalletAppContent() {
           >
             {supportedChains.map((chain) => (
               <option key={chain.id} value={chain.id}>
-                {`${chain.testnet ? "测试网" : "主网"} · ${chain.name}`}
+                {`${chain.testnet ? t.testnet : t.mainnet} · ${chain.name}`}
               </option>
             ))}
           </select>
         </div>
         {mounted && displayNetworkInfo.isTestnet && (
           <p className="mt-2 text-sm font-semibold text-amber-700">
-            ⚠ 当前为测试网环境（{displayNetworkInfo.name}），请勿使用主网资产。
+            {formatTemplate(t.testnetWarning, { network: displayNetworkInfo.name })}
           </p>
         )}
         {connectError && <p className="mt-2 text-sm text-red-600">{connectError}</p>}
       </section>
 
       <section className="section-card mt-6 animate-slideUp">
-        <h2 className="section-title">2. ABI 导入与合约配置</h2>
+        <h2 className="section-title">{t.contractSection}</h2>
         <div className="mt-3 grid gap-4 md:grid-cols-2">
           <label className="text-sm">
-            <span className="mb-1 block text-slate-700">合约地址</span>
+            <span className="mb-1 block text-slate-700 dark:text-slate-300">{t.contractAddress}</span>
             <input
               value={contractAddress}
               onChange={(e) => setContractAddress(e.target.value.trim())}
@@ -953,33 +1211,36 @@ function WalletAppContent() {
           </label>
 
           <label className="text-sm">
-            <span className="mb-1 block text-slate-700">导入 ABI JSON 文件</span>
+            <span className="mb-1 block text-slate-700 dark:text-slate-300">{t.importAbi}</span>
             <input
               type="file"
               accept="application/json,.json"
               onChange={onImportAbi}
-              className="block w-full rounded-xl border border-slate-200 bg-white/80 p-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-arkreen file:px-4 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-primary-600"
+              className="block w-full rounded-xl border border-slate-200 bg-white/80 p-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-arkreen file:px-4 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-primary-600 dark:border-slate-700 dark:bg-slate-800/90"
             />
           </label>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-dashed border-primary-200 bg-white/70 p-4">
-          <p className="text-sm font-medium text-slate-700">本地存储合约配置（名称 + 地址 + ABI）</p>
+        <div className="mt-4 rounded-2xl border border-dashed border-primary-200 bg-white/70 p-4 dark:border-slate-700 dark:bg-slate-900/70">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{t.localConfig}</p>
           <p className={`mt-1 text-xs font-semibold ${displayNetworkInfo.isTestnet ? "text-amber-700" : "text-primary-700"}`}>
-            当前配置将保存到：{displayNetworkInfo.isTestnet ? "测试网" : "主网"}列表（{displayNetworkInfo.name}）
+            {formatTemplate(t.saveToCurrentNetwork, {
+              networkType: displayNetworkInfo.isTestnet ? t.testnet : t.mainnet,
+              networkName: displayNetworkInfo.name,
+            })}
           </p>
           <div className="mt-2 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
             <input
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
-              placeholder="输入存储名称，例如：USDT 主网"
+              placeholder={t.saveNamePlaceholder}
               className="input-field"
             />
             <button
               onClick={saveCurrentContract}
               className="btn-primary rounded-xl px-4 py-2 text-sm"
             >
-              保存当前配置
+              {t.saveConfig}
             </button>
           </div>
 
@@ -989,7 +1250,7 @@ function WalletAppContent() {
               onChange={(e) => setSelectedSavedId(e.target.value)}
               className="input-field"
             >
-              <option value="">请选择当前网络已保存配置</option>
+              <option value="">{t.selectConfig}</option>
               {currentNetworkSavedContracts.map((item) => (
                 <option key={item.id} value={item.id}>
                   {`${item.name} · ${item.address.slice(0, 6)}...${item.address.slice(-4)} · ${
@@ -1004,13 +1265,16 @@ function WalletAppContent() {
                 className="btn-secondary rounded-xl px-4 py-2 text-sm"
                 disabled={!selectedSavedId}
               >
-                删除已选配置
+                {t.deleteSelected}
               </button>
             </div>
           </div>
 
-          <p className="mt-2 text-xs text-slate-500">
-            当前网络配置 {currentNetworkSavedContracts.length} 条（总计 {savedContracts.length} 条），刷新后仍可使用；切换网络后列表会自动切换。
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            {formatTemplate(t.configStats, {
+              current: currentNetworkSavedContracts.length,
+              total: savedContracts.length,
+            })}
           </p>
           {storageMessage && <p className="mt-2 text-sm text-primary-700">{storageMessage}</p>}
           {storageError && <p className="mt-2 text-sm text-red-600">{storageError}</p>}
@@ -1018,9 +1282,9 @@ function WalletAppContent() {
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-slate-700">自动检测结果：</span>
+            <span className="text-slate-700 dark:text-slate-300">{t.detectResult}</span>
             <span className={proxyMode ? "text-primary-700" : "text-slate-700"}>
-              {proxyChecking ? "检测中..." : proxyMode ? "代理合约" : "普通合约"}
+              {proxyChecking ? t.detecting : proxyMode ? t.proxyContract : t.normalContract}
             </span>
           </div>
           <button
@@ -1028,7 +1292,7 @@ function WalletAppContent() {
             className="btn-secondary rounded-lg px-3 py-1.5 text-xs"
             disabled={proxyChecking || !isAddress(contractAddress)}
           >
-            重新检测
+            {t.redetect}
           </button>
         </div>
 
@@ -1037,33 +1301,33 @@ function WalletAppContent() {
         )}
 
         {abiFileName && (
-          <p className="mt-2 text-sm text-primary-700">已导入 ABI：{abiFileName}</p>
+          <p className="mt-2 text-sm text-primary-700">{t.importedAbi} {abiFileName}</p>
         )}
         {abiError && <p className="mt-2 text-sm text-red-600">{abiError}</p>}
       </section>
 
       <section className="section-card mt-6 animate-slideUp">
-        <h2 className="section-title">3. 合约接口</h2>
+        <h2 className="section-title">{t.interfaceSection}</h2>
         <div className="mt-3 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => setSelectedMode("read")}
             className={`min-w-[10.5rem] rounded-xl px-3 py-2 text-center text-sm font-medium transition-all ${
               selectedMode === "read"
                 ? "bg-primary-600 text-white shadow-md shadow-primary-500/30"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             }`}
           >
-            {proxyMode ? "Read as Proxy" : "Read Contract"}
+            {proxyMode ? t.readAsProxy : t.readContract}
           </button>
           <button
             onClick={() => setSelectedMode("write")}
             className={`min-w-[10.5rem] rounded-xl px-3 py-2 text-center text-sm font-medium transition-all ${
               selectedMode === "write"
                 ? "bg-primary-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             }`}
           >
-            {proxyMode ? "Write as Proxy" : "Write Contract"}
+            {proxyMode ? t.writeAsProxy : t.writeContract}
           </button>
         </div>
 
@@ -1071,20 +1335,20 @@ function WalletAppContent() {
           {selectedMode === "read" && (
             <>
               {readFunctions.length === 0 && (
-                <p className="text-sm text-slate-500">暂无可读函数（view/pure）</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t.noReadFunctions}</p>
               )}
               {readFunctions.map((fn) => {
                 const state = getCallState(fn.signature);
                 const expanded = !!expandedFunctions[fn.signature];
                 return (
-                  <div key={fn.signature} className="rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm">
+                  <div key={fn.signature} className="rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
                     <button
                       type="button"
                       onClick={() => toggleFunctionExpanded(fn.signature)}
-                      className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-primary-50"
+                      className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-primary-50 dark:bg-slate-800 dark:hover:bg-slate-700"
                     >
-                      <span className="text-sm font-medium">{fn.signature}</span>
-                      <span className="text-xs text-slate-500">{expanded ? "收起" : "展开"}</span>
+                      <span className="text-sm font-medium dark:text-slate-100">{fn.signature}</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{expanded ? t.collapse : t.expand}</span>
                     </button>
 
                     {expanded && (
@@ -1113,12 +1377,12 @@ function WalletAppContent() {
                           className="btn-primary mt-3 rounded-xl px-4 py-2 text-sm"
                           disabled={state.loading}
                         >
-                          {state.loading ? "调用中..." : "Read"}
+                          {state.loading ? t.calling : t.read}
                         </button>
 
                         {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
                         {state.result && (
-                          <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-100 p-3 text-xs text-slate-700">
+                          <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                             {state.result}
                           </pre>
                         )}
@@ -1133,20 +1397,20 @@ function WalletAppContent() {
           {selectedMode === "write" && (
             <>
               {writeFunctions.length === 0 && (
-                <p className="text-sm text-slate-500">暂无可写函数（nonpayable/payable）</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t.noWriteFunctions}</p>
               )}
               {writeFunctions.map((fn) => {
                 const state = getCallState(fn.signature);
                 const expanded = !!expandedFunctions[fn.signature];
                 return (
-                  <div key={fn.signature} className="rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm">
+                  <div key={fn.signature} className="rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
                     <button
                       type="button"
                       onClick={() => toggleFunctionExpanded(fn.signature)}
-                      className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-primary-50"
+                      className="flex w-full items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-primary-50 dark:bg-slate-800 dark:hover:bg-slate-700"
                     >
-                      <span className="text-sm font-medium">{fn.signature}</span>
-                      <span className="text-xs text-slate-500">{expanded ? "收起" : "展开"}</span>
+                      <span className="text-sm font-medium dark:text-slate-100">{fn.signature}</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{expanded ? t.collapse : t.expand}</span>
                     </button>
 
                     {expanded && (
@@ -1188,12 +1452,12 @@ function WalletAppContent() {
                           className="btn-primary mt-3 rounded-xl px-4 py-2 text-sm"
                           disabled={state.loading}
                         >
-                          {state.loading ? "提交中..." : "Write"}
+                          {state.loading ? t.submitting : t.write}
                         </button>
 
                         {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
                         {state.result && (
-                          <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-100 p-3 text-xs text-slate-700">
+                          <pre className="mt-2 overflow-x-auto rounded-xl bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                             {state.result}
                           </pre>
                         )}
