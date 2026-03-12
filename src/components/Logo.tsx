@@ -13,7 +13,7 @@ export function Logo() {
         </svg>
       </div>
       <span className="bg-gradient-to-r from-arkreen to-primary-600 bg-clip-text text-xl font-bold text-transparent tracking-tight">
-        WalletUI
+        Web3 UI
       </span>
     </div>
   );

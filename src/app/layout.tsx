@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WalletUI - Powered by Arkreen",
+  title: "Web3 UI - Powered by Arkreen",
   description: "Web3 智能合约交互工具 - MetaMask + ABI",
 };
 

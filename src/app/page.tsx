@@ -20,16 +20,34 @@ import {
   useDisconnect,
 } from "wagmi";
 import { metaMask } from "wagmi/connectors";
-import { avalanche, bsc, mainnet, polygon } from "wagmi/chains";
+import {
+  avalanche,
+  avalancheFuji,
+  bsc,
+  bscTestnet,
+  mainnet,
+  polygon,
+  polygonAmoy,
+  sepolia,
+} from "wagmi/chains";
 
-const supportedChains = [mainnet, polygon, bsc, avalanche] as const;
+const supportedChains = [
+  mainnet,
+  polygon,
+  bsc,
+  avalanche,
+  sepolia,
+  polygonAmoy,
+  bscTestnet,
+  avalancheFuji,
+] as const;
 
 const wagmiConfig = createConfig({
   chains: supportedChains,
   connectors: [
     metaMask({
       dappMetadata: {
-        name: "Wallet UI",
+        name: "Web3 UI",
         url: "http://localhost:3000",
       },
     }),
@@ -39,14 +57,18 @@ const wagmiConfig = createConfig({
     [polygon.id]: http(),
     [bsc.id]: http(),
     [avalanche.id]: http(),
+    [sepolia.id]: http(),
+    [polygonAmoy.id]: http(),
+    [bscTestnet.id]: http(),
+    [avalancheFuji.id]: http(),
   },
 });
 
 const queryClient = new QueryClient();
 const SAVED_CONTRACTS_STORAGE_KEY = "wallet_ui_saved_contracts_v1";
 
-function getNetworkInfo(chainId?: number): { name: string; isTestnet: boolean } {
-  if (!chainId) return { name: "未知网络", isTestnet: false };
+function getNetworkInfo(chainId?: number): { name: string; isTestnet: boolean; isKnown: boolean } {
+  if (!chainId) return { name: "未知网络", isTestnet: false, isKnown: false };
 
   const map: Record<number, { name: string; isTestnet: boolean }> = {
     1: { name: "ETH Mainnet", isTestnet: false },
@@ -54,12 +76,15 @@ function getNetworkInfo(chainId?: number): { name: string; isTestnet: boolean } 
     56: { name: "BSC", isTestnet: false },
     43114: { name: "AVAX", isTestnet: false },
     11155111: { name: "Sepolia", isTestnet: true },
+    80001: { name: "Polygon Mumbai", isTestnet: true },
     80002: { name: "Polygon Amoy", isTestnet: true },
     97: { name: "BSC Testnet", isTestnet: true },
     43113: { name: "Avalanche Fuji", isTestnet: true },
   };
 
-  return map[chainId] ?? { name: `Chain ID: ${chainId}`, isTestnet: false };
+  return map[chainId]
+    ? { ...map[chainId], isKnown: true }
+    : { name: `Chain ID: ${chainId}`, isTestnet: false, isKnown: false };
 }
 
 type FunctionIO = {
@@ -89,6 +114,7 @@ type SavedContractEntry = {
   id: string;
   name: string;
   address: string;
+  chainId: number | null;
   abi: JsonFragment[];
   abiFileName: string;
   updatedAt: number;
@@ -185,6 +211,32 @@ function isEip1167ProxyBytecode(code: string): boolean {
   return normalized.startsWith("0x363d3d373d3d3d363d73") && normalized.includes("5af43d82803e903d91602b57fd5bf3");
 }
 
+function increaseByTenPercent(value: bigint): bigint {
+  return (value * 110n) / 100n;
+}
+
+async function buildGasOverrides(provider: BrowserProvider): Promise<Record<string, bigint>> {
+  const feeData = await provider.getFeeData();
+  const overrides: Record<string, bigint> = {};
+
+  const hasEip1559Fields = feeData.maxFeePerGas !== null || feeData.maxPriorityFeePerGas !== null;
+  if (hasEip1559Fields) {
+    if (feeData.maxFeePerGas !== null) {
+      overrides.maxFeePerGas = increaseByTenPercent(feeData.maxFeePerGas);
+    }
+    if (feeData.maxPriorityFeePerGas !== null) {
+      overrides.maxPriorityFeePerGas = increaseByTenPercent(feeData.maxPriorityFeePerGas);
+    }
+    return overrides;
+  }
+
+  if (feeData.gasPrice !== null) {
+    overrides.gasPrice = increaseByTenPercent(feeData.gasPrice);
+  }
+
+  return overrides;
+}
+
 function classifyFunctions(abi: JsonFragment[]): ParsedFunction[] {
   return abi
     .filter((item) => item.type === "function")
@@ -226,6 +278,8 @@ function WalletAppContent() {
   const [savedContracts, setSavedContracts] = useState<SavedContractEntry[]>([]);
   const [saveName, setSaveName] = useState("");
   const [selectedSavedId, setSelectedSavedId] = useState("");
+  const [selectedSwitchChainId, setSelectedSwitchChainId] = useState<number>(supportedChains[0].id);
+  const [switchingNetwork, setSwitchingNetwork] = useState(false);
   const [storageMessage, setStorageMessage] = useState("");
   const [storageError, setStorageError] = useState("");
 
@@ -252,9 +306,18 @@ function WalletAppContent() {
     [parsedFunctions],
   );
 
+  const activeChainId = currentChainId || detectedChainId;
   const networkInfo = useMemo(
-    () => getNetworkInfo(currentChainId || detectedChainId),
-    [currentChainId, detectedChainId],
+    () => getNetworkInfo(activeChainId),
+    [activeChainId],
+  );
+  const displayNetworkInfo = mounted
+    ? networkInfo
+    : { name: "--", isTestnet: false, isKnown: false };
+
+  const currentNetworkSavedContracts = useMemo(
+    () => savedContracts.filter((item) => item.chainId === activeChainId),
+    [savedContracts, activeChainId],
   );
 
   const isHydratedConnected = mounted && isConnected;
@@ -292,12 +355,20 @@ function WalletAppContent() {
       return;
     }
 
+    if (!activeChainId) {
+      setStorageError("请先连接钱包并识别当前网络");
+      return;
+    }
+
     const now = Date.now();
-    const existing = savedContracts.find((item) => item.name === normalizedName);
+    const existing = savedContracts.find(
+      (item) => item.name === normalizedName && item.chainId === activeChainId,
+    );
     const nextEntry: SavedContractEntry = {
       id: existing?.id ?? `${now}`,
       name: normalizedName,
       address: contractAddress,
+      chainId: activeChainId,
       abi: rawAbi,
       abiFileName,
       updatedAt: now,
@@ -309,7 +380,11 @@ function WalletAppContent() {
     ];
     persistSavedContracts(next);
     setSelectedSavedId(nextEntry.id);
-    setStorageMessage(existing ? "已更新该名称对应的配置" : "已保存配置到本地");
+    setStorageMessage(
+      existing
+        ? `已更新 ${networkInfo.isTestnet ? "测试网" : "主网"} 配置`
+        : `已保存到${networkInfo.isTestnet ? "测试网" : "主网"}配置列表`,
+    );
   }
 
   function loadSavedContractById(savedId: string) {
@@ -326,10 +401,32 @@ function WalletAppContent() {
     setRawAbi(target.abi);
     setAbiFileName(target.abiFileName);
     setCallStates({});
-    setStorageMessage(`已加载配置：${target.name}`);
+    const targetNetwork = getNetworkInfo(target.chainId ?? undefined);
+    setStorageMessage(`已加载配置：${target.name}（${targetNetwork.name}）`);
     if (isAddress(target.address)) {
       void detectProxyByAddress(target.address);
     }
+  }
+
+  function deleteSavedContractById(savedId: string) {
+    setStorageError("");
+    setStorageMessage("");
+
+    if (!savedId) {
+      setStorageError("请先选择需要删除的配置");
+      return;
+    }
+
+    const target = savedContracts.find((item) => item.id === savedId);
+    if (!target) {
+      setStorageError("未找到要删除的配置");
+      return;
+    }
+
+    const next = savedContracts.filter((item) => item.id !== savedId);
+    persistSavedContracts(next);
+    setSelectedSavedId("");
+    setStorageMessage(`已删除配置：${target.name}`);
   }
 
   useEffect(() => {
@@ -373,9 +470,15 @@ function WalletAppContent() {
           typeof item.id === "string" &&
           typeof item.name === "string" &&
           typeof item.address === "string" &&
+          (typeof item.chainId === "number" || item.chainId === null || typeof item.chainId === "undefined") &&
           Array.isArray(item.abi),
       );
-      setSavedContracts(valid);
+      setSavedContracts(
+        valid.map((item) => ({
+          ...item,
+          chainId: typeof item.chainId === "number" ? item.chainId : null,
+        })),
+      );
     } catch {
       setStorageError("本地配置读取失败，请重新保存");
     }
@@ -390,6 +493,20 @@ function WalletAppContent() {
     if (!selectedSavedId) return;
     loadSavedContractById(selectedSavedId);
   }, [selectedSavedId, savedContracts, mounted]);
+
+  useEffect(() => {
+    if (!mounted || !activeChainId) return;
+    setSelectedSwitchChainId(activeChainId);
+  }, [mounted, activeChainId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!selectedSavedId) return;
+    const inCurrentNetwork = currentNetworkSavedContracts.some((item) => item.id === selectedSavedId);
+    if (!inCurrentNetwork) {
+      setSelectedSavedId("");
+    }
+  }, [mounted, selectedSavedId, currentNetworkSavedContracts]);
 
   useEffect(() => {
     const ethereum = (window as Window & {
@@ -506,6 +623,73 @@ function WalletAppContent() {
     }
 
     setConnectError("");
+  }
+
+  async function switchNetwork(chainId: number) {
+    setConnectError("");
+    setStorageError("");
+    setStorageMessage("");
+
+    const ethereum = (window as Window & {
+      ethereum?: {
+        request?: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+      };
+    }).ethereum;
+
+    if (!ethereum?.request) {
+      setConnectError("未检测到 MetaMask，无法切换网络");
+      return;
+    }
+
+    const targetChain = supportedChains.find((chain) => chain.id === chainId);
+    if (!targetChain) {
+      setStorageError("目标网络不在支持列表中");
+      return;
+    }
+
+    try {
+      setSwitchingNetwork(true);
+      await ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: `0x${chainId.toString(16)}` }],
+      });
+      setDetectedChainId(chainId);
+      setStorageMessage(`已切换到 ${targetChain.name}`);
+    } catch (error) {
+      const err = error as { code?: number; message?: string };
+      if (err.code === 4902) {
+        try {
+          await ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: `0x${targetChain.id.toString(16)}`,
+                chainName: targetChain.name,
+                nativeCurrency: targetChain.nativeCurrency,
+                rpcUrls: targetChain.rpcUrls.default.http,
+                blockExplorerUrls: targetChain.blockExplorers?.default?.url
+                  ? [targetChain.blockExplorers.default.url]
+                  : undefined,
+              },
+            ],
+          });
+
+          await ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: `0x${chainId.toString(16)}` }],
+          });
+
+          setDetectedChainId(chainId);
+          setStorageMessage(`已添加并切换到 ${targetChain.name}`);
+        } catch (addError) {
+          setConnectError((addError as Error).message || "添加网络失败");
+        }
+      } else {
+        setConnectError(err.message || "网络切换失败");
+      }
+    } finally {
+      setSwitchingNetwork(false);
+    }
   }
 
   async function detectProxyByAddress(address: string) {
@@ -643,16 +827,26 @@ function WalletAppContent() {
       const method = contract.getFunction(fn.signature);
 
       if (isWrite) {
+        const gasOverrides = await buildGasOverrides(provider);
+        const txOverrides: Record<string, bigint> = { ...gasOverrides };
+        if (fn.stateMutability === "payable") {
+          txOverrides.value = currentState.value.trim() === "" ? 0n : BigInt(currentState.value);
+        }
+
         const tx = fn.stateMutability === "payable"
-          ? await method(...params, {
-              value: currentState.value.trim() === "" ? 0n : BigInt(currentState.value),
-            })
-          : await method(...params);
+          ? await method(...params, txOverrides)
+          : await method(...params, txOverrides);
 
         const receipt = await tx.wait();
         updateCallState(fn.signature, {
           loading: false,
-          result: prettyResult({ hash: tx.hash, status: receipt?.status ?? null }),
+          result: prettyResult({
+            hash: tx.hash,
+            status: receipt?.status ?? null,
+            gasPrice: tx.gasPrice ? tx.gasPrice.toString() : null,
+            maxFeePerGas: tx.maxFeePerGas ? tx.maxFeePerGas.toString() : null,
+            maxPriorityFeePerGas: tx.maxPriorityFeePerGas ? tx.maxPriorityFeePerGas.toString() : null,
+          }),
         });
         return;
       }
@@ -673,7 +867,7 @@ function WalletAppContent() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-8 md:px-8 md:py-10">
       <div className="rounded-3xl border border-primary-100/70 bg-gradient-to-br from-white via-white to-primary-50/60 p-6 shadow-lg shadow-primary-500/10 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-700">Unibuy Wallet UI</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-700">Web3 UI</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900 md:text-3xl">Wallet App (MetaMask + ABI)</h1>
         <p className="mt-2 text-sm text-slate-600 md:text-base">
           连接钱包、导入 ABI、快速执行合约读写调用。
@@ -708,18 +902,38 @@ function WalletAppContent() {
             </span>
             <span
               className={`rounded-full px-3 py-1 text-sm ${
-                mounted && networkInfo.isTestnet
+                mounted && displayNetworkInfo.isTestnet
                   ? "bg-amber-100 font-semibold text-amber-700"
                   : "bg-slate-100 text-slate-600"
               }`}
             >
-              网络: {mounted ? networkInfo.name : "--"}
+              网络: {displayNetworkInfo.isTestnet ? "测试网" : "主网"} · {displayNetworkInfo.name}
             </span>
           </div>
         </div>
-        {mounted && networkInfo.isTestnet && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <select
+            value={selectedSwitchChainId}
+            onChange={(e) => {
+              const nextChainId = Number(e.target.value);
+              setSelectedSwitchChainId(nextChainId);
+              if (mounted && !switchingNetwork && nextChainId !== activeChainId) {
+                void switchNetwork(nextChainId);
+              }
+            }}
+            className="input-field max-w-xs"
+            disabled={!mounted || switchingNetwork}
+          >
+            {supportedChains.map((chain) => (
+              <option key={chain.id} value={chain.id}>
+                {`${chain.testnet ? "测试网" : "主网"} · ${chain.name}`}
+              </option>
+            ))}
+          </select>
+        </div>
+        {mounted && displayNetworkInfo.isTestnet && (
           <p className="mt-2 text-sm font-semibold text-amber-700">
-            ⚠ 当前为测试网，请勿使用主网资产。
+            ⚠ 当前为测试网环境（{displayNetworkInfo.name}），请勿使用主网资产。
           </p>
         )}
         {connectError && <p className="mt-2 text-sm text-red-600">{connectError}</p>}
@@ -751,6 +965,9 @@ function WalletAppContent() {
 
         <div className="mt-4 rounded-2xl border border-dashed border-primary-200 bg-white/70 p-4">
           <p className="text-sm font-medium text-slate-700">本地存储合约配置（名称 + 地址 + ABI）</p>
+          <p className={`mt-1 text-xs font-semibold ${displayNetworkInfo.isTestnet ? "text-amber-700" : "text-primary-700"}`}>
+            当前配置将保存到：{displayNetworkInfo.isTestnet ? "测试网" : "主网"}列表（{displayNetworkInfo.name}）
+          </p>
           <div className="mt-2 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
             <input
               value={saveName}
@@ -772,8 +989,8 @@ function WalletAppContent() {
               onChange={(e) => setSelectedSavedId(e.target.value)}
               className="input-field"
             >
-              <option value="">请选择已保存配置</option>
-              {savedContracts.map((item) => (
+              <option value="">请选择当前网络已保存配置</option>
+              {currentNetworkSavedContracts.map((item) => (
                 <option key={item.id} value={item.id}>
                   {`${item.name} · ${item.address.slice(0, 6)}...${item.address.slice(-4)} · ${
                     item.abiFileName || "ABI"
@@ -781,9 +998,20 @@ function WalletAppContent() {
                 </option>
               ))}
             </select>
+            <div className="mt-2 flex justify-end">
+              <button
+                onClick={() => deleteSavedContractById(selectedSavedId)}
+                className="btn-secondary rounded-xl px-4 py-2 text-sm"
+                disabled={!selectedSavedId}
+              >
+                删除已选配置
+              </button>
+            </div>
           </div>
 
-          <p className="mt-2 text-xs text-slate-500">已保存 {savedContracts.length} 条配置，刷新后仍可使用；从列表选择会自动加载。</p>
+          <p className="mt-2 text-xs text-slate-500">
+            当前网络配置 {currentNetworkSavedContracts.length} 条（总计 {savedContracts.length} 条），刷新后仍可使用；切换网络后列表会自动切换。
+          </p>
           {storageMessage && <p className="mt-2 text-sm text-primary-700">{storageMessage}</p>}
           {storageError && <p className="mt-2 text-sm text-red-600">{storageError}</p>}
         </div>
