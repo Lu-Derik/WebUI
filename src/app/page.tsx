@@ -414,18 +414,52 @@ function increaseByTenPercent(value: bigint): bigint {
   return (value * 110n) / 100n;
 }
 
-async function buildGasOverrides(provider: BrowserProvider): Promise<Record<string, bigint>> {
+function maxBigInt(values: bigint[]): bigint {
+  return values.reduce((maxValue, currentValue) =>
+    currentValue > maxValue ? currentValue : maxValue,
+  0n);
+}
+
+function parseMinimumPriorityFeeFromError(error: unknown): bigint | null {
+  const message = (error as { message?: string })?.message ?? String(error ?? "");
+  const matched = message.match(/minimum needed\s+(\d+)/i);
+  if (!matched?.[1]) {
+    return null;
+  }
+
+  try {
+    return BigInt(matched[1]);
+  } catch {
+    return null;
+  }
+}
+
+async function buildGasOverrides(
+  provider: BrowserProvider,
+  minPriorityFeePerGas?: bigint,
+): Promise<Record<string, bigint>> {
   const feeData = await provider.getFeeData();
   const overrides: Record<string, bigint> = {};
 
   const hasEip1559Fields = feeData.maxFeePerGas !== null || feeData.maxPriorityFeePerGas !== null;
   if (hasEip1559Fields) {
-    if (feeData.maxFeePerGas !== null) {
-      overrides.maxFeePerGas = increaseByTenPercent(feeData.maxFeePerGas);
+    const boostedPriorityFee = feeData.maxPriorityFeePerGas !== null
+      ? increaseByTenPercent(feeData.maxPriorityFeePerGas)
+      : 0n;
+    const priorityFeeCandidates = [boostedPriorityFee];
+    if (minPriorityFeePerGas && minPriorityFeePerGas > 0n) {
+      priorityFeeCandidates.push(increaseByTenPercent(minPriorityFeePerGas));
     }
-    if (feeData.maxPriorityFeePerGas !== null) {
-      overrides.maxPriorityFeePerGas = increaseByTenPercent(feeData.maxPriorityFeePerGas);
-    }
+    const priorityFee = maxBigInt(priorityFeeCandidates);
+
+    const boostedMaxFee = feeData.maxFeePerGas !== null
+      ? increaseByTenPercent(feeData.maxFeePerGas)
+      : 0n;
+    const minMaxFee = priorityFee * 2n;
+    const maxFee = maxBigInt([boostedMaxFee, minMaxFee, priorityFee]);
+
+    overrides.maxPriorityFeePerGas = priorityFee;
+    overrides.maxFeePerGas = maxFee;
     return overrides;
   }
 
@@ -1063,15 +1097,27 @@ function WalletAppContent() {
       const method = contract.getFunction(fn.signature);
 
       if (isWrite) {
-        const gasOverrides = await buildGasOverrides(provider);
-        const txOverrides: Record<string, bigint> = { ...gasOverrides };
-        if (fn.stateMutability === "payable") {
-          txOverrides.value = currentState.value.trim() === "" ? 0n : BigInt(currentState.value);
-        }
+        const sendWriteTx = async (gasOverrides: Record<string, bigint>) => {
+          const txOverrides: Record<string, bigint> = { ...gasOverrides };
+          if (fn.stateMutability === "payable") {
+            txOverrides.value = currentState.value.trim() === "" ? 0n : BigInt(currentState.value);
+          }
+          return method(...params, txOverrides);
+        };
 
-        const tx = fn.stateMutability === "payable"
-          ? await method(...params, txOverrides)
-          : await method(...params, txOverrides);
+        let tx;
+        try {
+          const gasOverrides = await buildGasOverrides(provider);
+          tx = await sendWriteTx(gasOverrides);
+        } catch (firstError) {
+          const minimumPriorityFee = parseMinimumPriorityFeeFromError(firstError);
+          if (minimumPriorityFee === null) {
+            throw firstError;
+          }
+
+          const retryGasOverrides = await buildGasOverrides(provider, minimumPriorityFee);
+          tx = await sendWriteTx(retryGasOverrides);
+        }
 
         const receipt = await tx.wait();
         updateCallState(fn.signature, {
