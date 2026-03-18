@@ -125,6 +125,7 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     submitting: "提交中...",
     read: "Read",
     write: "Write",
+    maxValueBtn: "最大值",
   },
   "zh-TW": {
     subtitle: "連接錢包、匯入 ABI、快速執行合約讀寫呼叫。",
@@ -171,6 +172,7 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     submitting: "提交中...",
     read: "Read",
     write: "Write",
+    maxValueBtn: "最大值",
   },
   en: {
     subtitle: "Connect wallet, import ABI, and execute read/write contract calls quickly.",
@@ -217,6 +219,7 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     submitting: "Submitting...",
     read: "Read",
     write: "Write",
+    maxValueBtn: "Max",
   },
   fr: {
     subtitle: "Connectez le portefeuille, importez l'ABI et exécutez rapidement les appels de lecture/écriture.",
@@ -263,6 +266,7 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     submitting: "Soumission...",
     read: "Read",
     write: "Write",
+    maxValueBtn: "Max",
   },
 };
 
@@ -1059,6 +1063,9 @@ function WalletAppContent() {
 
       setRawAbi(abi);
       setAbiFileName(file.name);
+      // Only set saveName if it's currently empty (do not always overwrite)
+      const baseName = file.name.replace(/\.[^/.]+$/, "");
+      setSaveName((prev) => prev || baseName);
       setCallStates({});
       if (isAddress(contractAddress)) {
         void detectProxyByAddress(contractAddress);
@@ -1258,12 +1265,14 @@ function WalletAppContent() {
 
           <label className="text-sm">
             <span className="mb-1 block text-slate-700 dark:text-slate-300">{t.importAbi}</span>
-            <input
-              type="file"
-              accept="application/json,.json"
-              onChange={onImportAbi}
-              className="block w-full rounded-xl border border-slate-200 bg-white/80 p-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-arkreen file:px-4 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-primary-600 dark:border-slate-700 dark:bg-slate-800/90"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={onImportAbi}
+                className="block w-full rounded-xl border border-slate-200 bg-white/80 p-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-arkreen file:px-4 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-primary-600 dark:border-slate-700 dark:bg-slate-800/90"
+              />
+            </div>
           </label>
         </div>
 
@@ -1493,13 +1502,35 @@ function WalletAppContent() {
                           )}
                         </div>
 
-                        <button
-                          onClick={() => executeFunction(fn, true)}
-                          className="btn-primary mt-3 rounded-xl px-4 py-2 text-sm"
-                          disabled={state.loading}
-                        >
-                          {state.loading ? t.submitting : t.write}
-                        </button>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            onClick={() => executeFunction(fn, true)}
+                            className="btn-primary rounded-xl px-4 py-2 text-sm"
+                            disabled={state.loading}
+                          >
+                            {state.loading ? t.submitting : t.write}
+                          </button>
+
+                          {/* Show Max button for ERC20-like approve(address,uint256) */}
+                          {fn.name === "approve" && fn.inputs.length >= 2 && fn.inputs[1].type.startsWith("uint") && (
+                            <button
+                              onClick={() => {
+                                // Use 256-bit max expressed as hex (0xFF...FF)
+                                const maxHex = "0x" + "f".repeat(64);
+                                const argName = fn.inputs[1].name || `arg1`;
+                                updateCallState(fn.signature, {
+                                  args: {
+                                    ...state.args,
+                                    [argName]: maxHex,
+                                  },
+                                });
+                              }}
+                              className="btn-secondary rounded-xl px-3 py-2 text-sm"
+                            >
+                              {t.maxValueBtn}
+                            </button>
+                          )}
+                        </div>
 
                         {state.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
                         {state.result && (
