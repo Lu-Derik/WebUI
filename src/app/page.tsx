@@ -126,6 +126,9 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     read: "Read",
     write: "Write",
     maxValueBtn: "最大值",
+    forceSendWrite: "强制发送写交易（跳过预估）",
+    forceSendHint: "启用后将直接广播交易，失败也会上链并消耗 Gas。",
+    forceGasLimit: "强制 Gas Limit",
   },
   "zh-TW": {
     subtitle: "連接錢包、匯入 ABI、快速執行合約讀寫呼叫。",
@@ -173,6 +176,9 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     read: "Read",
     write: "Write",
     maxValueBtn: "最大值",
+    forceSendWrite: "強制發送寫交易（跳過預估）",
+    forceSendHint: "啟用後將直接廣播交易，失敗也會上鏈並消耗 Gas。",
+    forceGasLimit: "強制 Gas Limit",
   },
   en: {
     subtitle: "Connect wallet, import ABI, and execute read/write contract calls quickly.",
@@ -220,6 +226,9 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     read: "Read",
     write: "Write",
     maxValueBtn: "Max",
+    forceSendWrite: "Force send write tx (skip estimation)",
+    forceSendHint: "When enabled, tx is broadcast directly and may still revert on-chain (gas is consumed).",
+    forceGasLimit: "Force Gas Limit",
   },
   fr: {
     subtitle: "Connectez le portefeuille, importez l'ABI et exécutez rapidement les appels de lecture/écriture.",
@@ -267,6 +276,9 @@ const uiText: Record<UiLocale, Record<string, string>> = {
     read: "Read",
     write: "Write",
     maxValueBtn: "Max",
+    forceSendWrite: "Forcer l'envoi de la tx d'écriture (ignorer l'estimation)",
+    forceSendHint: "Si activé, la tx est diffusée directement et peut échouer on-chain (le gas est consommé).",
+    forceGasLimit: "Gas Limit forcé",
   },
 };
 
@@ -528,6 +540,8 @@ function WalletAppContent() {
   const [selectedMode, setSelectedMode] = useState<ContractMode>("read");
   const [callStates, setCallStates] = useState<Record<string, CallState>>({});
   const [expandedFunctions, setExpandedFunctions] = useState<Record<string, boolean>>({});
+  const [forceSendWriteTx, setForceSendWriteTx] = useState(false);
+  const [forceGasLimitInput, setForceGasLimitInput] = useState("1000000");
 
   const parsedFunctions = useMemo(() => classifyFunctions(rawAbi), [rawAbi]);
 
@@ -1104,7 +1118,37 @@ function WalletAppContent() {
       const method = contract.getFunction(fn.signature);
 
       if (isWrite) {
+        const parseForceGasLimit = (): bigint => {
+          const raw = forceGasLimitInput.trim();
+          if (!raw) {
+            throw new Error("强制发送模式下 Gas Limit 不能为空");
+          }
+
+          const gasLimit = BigInt(raw);
+          if (gasLimit <= 0n) {
+            throw new Error("Gas Limit 必须大于 0");
+          }
+          return gasLimit;
+        };
+
         const sendWriteTx = async (gasOverrides: Record<string, bigint>) => {
+          if (forceSendWriteTx) {
+            const txOverrides: Record<string, bigint> = {
+              ...gasOverrides,
+              gasLimit: parseForceGasLimit(),
+            };
+
+            if (fn.stateMutability === "payable") {
+              txOverrides.value = currentState.value.trim() === "" ? 0n : BigInt(currentState.value);
+            }
+
+            const populatedTx = await method.populateTransaction(...params);
+            return signer.sendTransaction({
+              ...populatedTx,
+              ...txOverrides,
+            });
+          }
+
           const txOverrides: Record<string, bigint> = { ...gasOverrides };
           if (fn.stateMutability === "payable") {
             txOverrides.value = currentState.value.trim() === "" ? 0n : BigInt(currentState.value);
@@ -1451,6 +1495,30 @@ function WalletAppContent() {
 
           {selectedMode === "write" && (
             <>
+              <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-sm dark:border-amber-900/70 dark:bg-amber-900/20">
+                <label className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={forceSendWriteTx}
+                    onChange={(e) => setForceSendWriteTx(e.target.checked)}
+                  />
+                  <span className="font-medium text-amber-800 dark:text-amber-200">{t.forceSendWrite}</span>
+                </label>
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{t.forceSendHint}</p>
+
+                {forceSendWriteTx && (
+                  <div className="mt-2 max-w-sm">
+                    <label className="text-xs font-medium text-amber-800 dark:text-amber-200">{t.forceGasLimit}</label>
+                    <input
+                      value={forceGasLimitInput}
+                      onChange={(e) => setForceGasLimitInput(e.target.value)}
+                      placeholder="1000000"
+                      className="input-field mt-1"
+                    />
+                  </div>
+                )}
+              </div>
+
               {writeFunctions.length === 0 && (
                 <p className="text-sm text-slate-500 dark:text-slate-400">{t.noWriteFunctions}</p>
               )}
