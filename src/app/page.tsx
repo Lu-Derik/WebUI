@@ -40,6 +40,16 @@ const supportedChains = [
   polygonAmoy,
   bscTestnet,
   avalancheFuji,
+  // Local Anvil (hardhat/Anvil local dev chain)
+  {
+    id: 31337,
+    name: "Anvil",
+    network: "anvil",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: { default: { http: ["http://127.0.0.1:8545"] } },
+    blockExplorers: { default: { name: "Local Explorer", url: "http://127.0.0.1:8545", apiUrl: "" } },
+    testnet: true,
+  },
 ] as const;
 
 const wagmiConfig = createConfig({
@@ -54,6 +64,7 @@ const wagmiConfig = createConfig({
   ],
   transports: {
     [mainnet.id]: http(),
+    [31337]: http(),
     [polygon.id]: http(),
     [bsc.id]: http(),
     [avalanche.id]: http(),
@@ -295,6 +306,7 @@ function getNetworkInfo(chainId?: number): { name: string; isTestnet: boolean; i
     80002: { name: "Polygon Amoy", isTestnet: true },
     97: { name: "BSC Testnet", isTestnet: true },
     43113: { name: "Avalanche Fuji", isTestnet: true },
+    31337: { name: "Anvil", isTestnet: true },
   };
 
   return map[chainId]
