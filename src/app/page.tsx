@@ -364,38 +364,68 @@ function parseArrayBaseType(solType: string): string {
   return idx === -1 ? solType : solType.slice(0, idx);
 }
 
-function convertInputValue(rawValue: string, solType: string): unknown {
-  if (isArrayType(solType)) {
-    const parsed = JSON.parse(rawValue || "[]");
-    if (!Array.isArray(parsed)) {
-      throw new Error(`参数类型 ${solType} 需要 JSON 数组`);
+function isEthereumAddress(value: string): boolean {
+  const trimmed = value.trim();
+  return /^0x[a-fA-F0-9]{40}$/.test(trimmed) && isAddress(trimmed);
+}
+
+function parseArrayInput(rawValue: string, solType: string): unknown[] {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!Array.isArray(parsed)) {
+        throw new Error(`参数类型 ${solType} 需要数组`);
+      }
+      return parsed;
+    } catch {
+      throw new Error(`参数类型 ${solType} 请输入 JSON 数组，或使用逗号分隔输入`);
     }
+  }
+
+  // For nested arrays, require JSON input to avoid ambiguous parsing.
+  if (parseArrayBaseType(solType).includes("[")) {
+    throw new Error(`参数类型 ${solType} 请输入 JSON 数组`);
+  }
+
+  return trimmed.split(",").map((item) => item.trim());
+}
+
+function convertInputValue(rawValue: string, solType: string): unknown {
+  const normalizedRaw = rawValue.trim();
+
+  if (isArrayType(solType)) {
+    const parsed = parseArrayInput(normalizedRaw, solType);
     const baseType = parseArrayBaseType(solType);
     return parsed.map((item) => convertInputValue(String(item), baseType));
   }
 
   if (solType.startsWith("uint") || solType.startsWith("int")) {
-    if (rawValue.trim() === "") {
+    if (normalizedRaw === "") {
       throw new Error(`参数类型 ${solType} 不能为空`);
     }
-    return BigInt(rawValue);
+    return BigInt(normalizedRaw);
   }
 
   if (solType === "bool") {
-    const lowered = rawValue.trim().toLowerCase();
+    const lowered = normalizedRaw.toLowerCase();
     if (lowered === "true") return true;
     if (lowered === "false") return false;
     throw new Error("bool 参数只接受 true 或 false");
   }
 
   if (solType === "address") {
-    if (!isAddress(rawValue)) {
-      throw new Error("address 参数格式不正确");
+    if (!isEthereumAddress(normalizedRaw)) {
+      throw new Error("address 参数格式不正确（需为 ETH 地址）");
     }
-    return rawValue;
+    return normalizedRaw;
   }
 
-  return rawValue;
+  return normalizedRaw;
 }
 
 function normalizeValue(value: unknown): unknown {
@@ -619,7 +649,7 @@ function WalletAppContent() {
       return;
     }
 
-    if (!isAddress(contractAddress)) {
+    if (!isEthereumAddress(contractAddress)) {
       setStorageError("请先输入有效合约地址");
       return;
     }
@@ -677,7 +707,7 @@ function WalletAppContent() {
     setCallStates({});
     const targetNetwork = getNetworkInfo(target.chainId ?? undefined);
     setStorageMessage(`已加载配置：${target.name}（${targetNetwork.name}）`);
-    if (isAddress(target.address)) {
+    if (isEthereumAddress(target.address)) {
       void detectProxyByAddress(target.address);
     }
   }
@@ -993,7 +1023,7 @@ function WalletAppContent() {
   }
 
   async function detectProxyByAddress(address: string) {
-    if (!isAddress(address)) {
+    if (!isEthereumAddress(address)) {
       setProxyMode(false);
       setProxyDetectionNote("请输入有效合约地址后自动检测");
       return;
@@ -1046,7 +1076,7 @@ function WalletAppContent() {
 
   useEffect(() => {
     if (!mounted) return;
-    if (!isAddress(contractAddress)) {
+    if (!isEthereumAddress(contractAddress)) {
       setProxyDetectionNote("请输入有效合约地址后自动检测");
       setProxyMode(false);
       return;
@@ -1093,7 +1123,7 @@ function WalletAppContent() {
       const baseName = file.name.replace(/\.[^/.]+$/, "");
       setSaveName((prev) => prev || baseName);
       setCallStates({});
-      if (isAddress(contractAddress)) {
+      if (isEthereumAddress(contractAddress)) {
         void detectProxyByAddress(contractAddress);
       }
     } catch (error) {
@@ -1107,7 +1137,7 @@ function WalletAppContent() {
       return;
     }
 
-    if (!isAddress(contractAddress)) {
+    if (!isEthereumAddress(contractAddress)) {
       updateCallState(fn.signature, { error: "请输入有效的合约地址" });
       return;
     }
@@ -1121,7 +1151,7 @@ function WalletAppContent() {
 
       const currentState = getCallState(fn.signature);
       const params = fn.inputs.map((input) =>
-        convertInputValue(currentState.args[input.name] ?? "", input.type),
+        convertInputValue((currentState.args[input.name] ?? "").trim(), input.type),
       );
 
       const provider = new BrowserProvider(window.ethereum);
@@ -1151,7 +1181,8 @@ function WalletAppContent() {
             };
 
             if (fn.stateMutability === "payable") {
-              txOverrides.value = currentState.value.trim() === "" ? 0n : BigInt(currentState.value);
+              const payableValue = currentState.value.trim();
+              txOverrides.value = payableValue === "" ? 0n : BigInt(payableValue);
             }
 
             const populatedTx = await method.populateTransaction(...params);
@@ -1163,7 +1194,8 @@ function WalletAppContent() {
 
           const txOverrides: Record<string, bigint> = { ...gasOverrides };
           if (fn.stateMutability === "payable") {
-            txOverrides.value = currentState.value.trim() === "" ? 0n : BigInt(currentState.value);
+            const payableValue = currentState.value.trim();
+            txOverrides.value = payableValue === "" ? 0n : BigInt(payableValue);
           }
           return method(...params, txOverrides);
         };
@@ -1401,7 +1433,7 @@ function WalletAppContent() {
           <button
             onClick={() => detectProxyByAddress(contractAddress)}
             className="btn-secondary rounded-lg px-3 py-1.5 text-xs"
-            disabled={proxyChecking || !isAddress(contractAddress)}
+            disabled={proxyChecking || !isEthereumAddress(contractAddress)}
           >
             {t.redetect}
           </button>
@@ -1474,7 +1506,7 @@ function WalletAppContent() {
                                 updateCallState(fn.signature, {
                                   args: {
                                     ...state.args,
-                                    [input.name]: e.target.value,
+                                    [input.name]: e.target.value.trim(),
                                   },
                                 })
                               }
@@ -1562,7 +1594,7 @@ function WalletAppContent() {
                                 updateCallState(fn.signature, {
                                   args: {
                                     ...state.args,
-                                    [input.name]: e.target.value,
+                                    [input.name]: e.target.value.trim(),
                                   },
                                 })
                               }
@@ -1575,7 +1607,7 @@ function WalletAppContent() {
                               placeholder="msg.value (wei)"
                               value={state.value}
                               onChange={(e) =>
-                                updateCallState(fn.signature, { value: e.target.value })
+                                updateCallState(fn.signature, { value: e.target.value.trim() })
                               }
                               className="input-field"
                             />
