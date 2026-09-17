@@ -7,6 +7,7 @@ import {
   FunctionFragment,
   InterfaceAbi,
   JsonFragment,
+  JsonRpcProvider,
   isAddress,
 } from "ethers";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
@@ -31,15 +32,41 @@ import {
   sepolia,
 } from "wagmi/chains";
 
+const arc = {
+  id: 5042,
+  name: "Arc",
+  network: "arc",
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.mainnet.arc.io"] } },
+  blockExplorers: {
+    default: { name: "Arc Explorer", url: "https://explorer.arc.io", apiUrl: "https://explorer.arc.io/api" },
+  },
+  testnet: false,
+} as const;
+
+const arcTestnet = {
+  id: 5042002,
+  name: "Arc Testnet",
+  network: "arc-testnet",
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.testnet.arc.io"] } },
+  blockExplorers: {
+    default: { name: "Arc Testnet Explorer", url: "https://testnet.arcscan.app", apiUrl: "https://testnet.arcscan.app/api" },
+  },
+  testnet: true,
+} as const;
+
 const supportedChains = [
   mainnet,
   polygon,
   bsc,
   avalanche,
+  arc,
   sepolia,
   polygonAmoy,
   bscTestnet,
   avalancheFuji,
+  arcTestnet,
   // Local Anvil (hardhat/Anvil local dev chain)
   {
     id: 31337,
@@ -68,10 +95,12 @@ const wagmiConfig = createConfig({
     [polygon.id]: http(),
     [bsc.id]: http(),
     [avalanche.id]: http(),
+    [arc.id]: http(),
     [sepolia.id]: http(),
     [polygonAmoy.id]: http(),
     [bscTestnet.id]: http(),
     [avalancheFuji.id]: http(),
+    [arcTestnet.id]: http(),
   },
 });
 
@@ -1046,14 +1075,36 @@ function WalletAppContent() {
     const BEACON_SLOT =
       "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50";
 
+    async function readProxySignals(readProvider: BrowserProvider | JsonRpcProvider) {
+      return Promise.all([
+        readProvider.getStorage(address, IMPLEMENTATION_SLOT),
+        readProvider.getStorage(address, BEACON_SLOT),
+        readProvider.getCode(address),
+      ]);
+    }
+
     try {
       setProxyChecking(true);
-      const provider = new BrowserProvider(ethereum);
-      const [implStorage, beaconStorage, code] = await Promise.all([
-        provider.getStorage(address, IMPLEMENTATION_SLOT),
-        provider.getStorage(address, BEACON_SLOT),
-        provider.getCode(address),
-      ]);
+      const walletProvider = new BrowserProvider(ethereum);
+
+      let implStorage: string;
+      let beaconStorage: string;
+      let code: string;
+      try {
+        [implStorage, beaconStorage, code] = await readProxySignals(walletProvider);
+      } catch (walletReadError) {
+        // Wallet's own configured RPC for this network rejected the call (e.g. a
+        // domain-restricted or misconfigured endpoint). Fall back to a public RPC
+        // for this read-only check so detection doesn't depend on wallet RPC config.
+        const fallbackRpcUrl = supportedChains.find(
+          (chain) => chain.id === currentChainId,
+        )?.rpcUrls.default.http[0];
+        if (!fallbackRpcUrl) {
+          throw walletReadError;
+        }
+        const fallbackProvider = new JsonRpcProvider(fallbackRpcUrl);
+        [implStorage, beaconStorage, code] = await readProxySignals(fallbackProvider);
+      }
 
       const detected =
         hasNonZeroStorage(implStorage) ||
